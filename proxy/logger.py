@@ -5,6 +5,7 @@ import multiprocessing
 import os
 
 from proxy.const import Const
+from proxy.config import Config
 
 def log_basic_config():
     #logging.basicConfig(format="%(message)s", level=logging.INFO)
@@ -49,9 +50,10 @@ def log_per_process(message, prefix):
     logger_name = prefix + multiprocessing.current_process().name
     if not prefix in logstate.has_handler:
         logstate.has_handler.append(prefix)
-        if not os.path.exists(Const.LOG_DIR):
-            os.makedirs(Const.LOG_DIR, mode=0o777, exist_ok=True)
-        fhandler = logging.FileHandler(os.path.join(Const.LOG_DIR, logger_name), "w")
+        log_dir = Config.value(Const.MAIN_SECTION, "log_path")
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir, mode=0o777, exist_ok=True)
+        fhandler = logging.FileHandler(os.path.join(log_dir, logger_name), "w")
         fhandler.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
         logger(logger_name).addHandler(fhandler)
     logger(logger_name).warning(message)

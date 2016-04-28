@@ -86,7 +86,7 @@ class ProxyServer:
             self._processes.append(new_data)
             new_proc.start()
 
-        SLEEP_PERIOD = 2
+        SLEEP_PERIOD = 1
 
         self._all_open = [self._server_socket,]
         ready = []
