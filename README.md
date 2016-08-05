@@ -1,7 +1,7 @@
 
 WHAT IS THIS?
 This is the simple caching proxy server. Yes I know there are heaps of them, but this one
-is not to reinvent the wheel. Its aim just to show my developing abilities. This task 
+is not to reinvent the wheel. Its aim just to master my developing abilities. This task 
 involves a good complex of technologies.
 
 PREREQUISITES

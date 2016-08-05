@@ -77,6 +77,7 @@ class ProxyServer:
         #create child processes
         for _ in range(max_proc):
             ipc_socket_parent, ipc_socket_child = net.ipc_socket_pair()
+            #this is used to get statistics and monitor/change state of child process
             new_data = ProcData()
             new_proc = multiprocessing.Process(group=None, target=ConnectionWorkerProcess(), name="p%i" % _, 
                 args=(new_data,ipc_socket_child,self._stdout_lock))
@@ -92,18 +93,22 @@ class ProxyServer:
         ready = []
 
         while 1:
+            #will block here if no new sockets
             inputs, outputs, failed = select.select(input_sockets, [], input_sockets, SLEEP_PERIOD)
             changes = False
 
             for sock in inputs:
                 if self._server_socket == sock:
                     connection, addr = self._server_socket.accept()
+                    #those needed to be passed back to select at the end of the iteration
                     input_sockets.append(connection)
+                    #this is just to monitor the list of FDs in charge
                     self._all_open.append(connection)
 
                 else:
                     if None == self._start_time:
                         self._start_time = time.time()
+                    #those ready to read go to ready list immediately
                     ready.append(sock)
                     input_sockets.remove(sock)
                     changes = True
@@ -112,20 +117,24 @@ class ProxyServer:
                     assigned = False
                     for proc_data in self._processes:
                         if ProcData.READY == proc_data.status.value:
+                            #assign to processes if there are available non-busy ones 
                             ready.remove(sock)
                             proc_data.client_sock = sock
                             log("A-%i-%s " % (sock.fileno(), proc_data.process_name))
                             proc_data.status.value = ProcData.ACTIVE
+                            #this is the only way you can pass an open socket to already running process
                             net.fd_through_socket(proc_data.ipc_socket_parent, sock.fileno())
                             assigned = True
                             break
             for sock in input_sockets.copy():
                 if not sock == self._server_socket and not net.is_connected(sock):
+                #they tend to shut down eventually so cleanup needed
                     input_sockets.remove(sock)
                     sock.close()
                     self._all_open.remove(sock)
 
             for sock in failed:
+                #this surprisingly never happenens, dont know why?
                 log("F-%i " % sock.fileno())
                 sock.close()
                 input_sockets.remove(sock)
@@ -134,7 +143,7 @@ class ProxyServer:
                 self._process_if_done(proc_data, input_sockets)
        
             active_proc_num = len([1 for proc_data in self._processes if ProcData.ACTIVE == proc_data.status.value])
-                        
+            #statistics of active processes, can actually be done at different places
             if changes:
                 self._proc_avg += active_proc_num
                 self._proc_avg_cnt += 1
