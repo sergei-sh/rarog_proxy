@@ -1,3 +1,10 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes: Logging helpers
+"""
+
 
 import logging
 import logging.config

@@ -1,3 +1,12 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes: 
+
+Should be refactored to simple functions. No need for class here
+"""
+
 
 import array
 import os
@@ -7,6 +16,8 @@ import struct
 from proxy.logger import logerror, logstate
 
 class NetworkRoutines:
+    """ All the application network interaction
+    """
     DEFAULT_PORT = 80
     TIMEOUT = 10 
     TCP_ESTABLISHED = 1

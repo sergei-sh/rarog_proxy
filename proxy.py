@@ -1,3 +1,15 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes: 
+
+The main application class and program entry point.
+
+The application really works (can display various HTML pages, rather quick), but the funcionality is very limited.
+Please don't use it in any production :)
+"""
+
 import logging
 import multiprocessing
 import os

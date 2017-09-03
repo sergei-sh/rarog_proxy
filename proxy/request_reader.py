@@ -1,8 +1,16 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes: Very limited request parsing. Only GET method is supported
+"""
+
 
 from proxy.message_reader import MessageReader
 
 class RequestReader(MessageReader):
-    """Extracts request fields of interest"""
+    """Extracts request fields of interest
+    """
     GET, OTHER, BAD = list(range(3))    
 
     def cache_location(self):

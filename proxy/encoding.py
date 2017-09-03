@@ -1,3 +1,10 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes: String conversions
+"""
+
 
 def to_str(data):
     if isinstance(data, bytes):

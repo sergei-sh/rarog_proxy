@@ -1,3 +1,10 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes: Main data flow redirection/request handling happens here
+"""
+
 import logging 
 import multiprocessing
 import os
@@ -35,6 +42,9 @@ class ProcData:
         self.client_sock = None
 
 class ConnectionWorkerProcess:
+    """Handles one process. Get an IPC socket initially which is then used to retrieve 
+       a client socket
+    """
     #will be called in parent process
     def __init__(self):
         self.is_init = False

@@ -1,3 +1,10 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes:
+"""
+
 
 import re
 
@@ -5,7 +12,8 @@ from proxy.logger import logerror
 from proxy.message_reader import MessageReader
 
 class ResponseReader(MessageReader):
-    """Extracts response's fields of interest"""
+    """Extracts response's fields of interest
+    """
 
     def response_status(self):
         return self._response_status 

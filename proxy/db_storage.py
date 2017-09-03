@@ -1,3 +1,10 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes: Database storage for cached data
+"""
+
 
 from logging import WARNING
 from psycopg2 import connect, Binary, DatabaseError, ProgrammingError, IntegrityError, OperationalError

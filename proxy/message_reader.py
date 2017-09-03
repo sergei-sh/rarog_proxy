@@ -1,10 +1,22 @@
+""" 
+Updated: 2016
+Author: Sergei Shliakhtin
+Contact: xxx.serj@gmail.com
+Notes: 
+
+This most probably should have not been implemented by hand, but rather used some 
+library call.
+"""
+
 
 import re
 
 from proxy.logger import logger, logerror, logstate
 
 class MessageReader(object):
-    """The base class for reading an HTTP message from a socket"""
+    """The base class for reading an HTTP message from a socket. Handles both Content-Length and 
+       chunked encoding.
+    """
 
     def message(self):
         return self._message
