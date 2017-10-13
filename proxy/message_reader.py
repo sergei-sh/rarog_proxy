@@ -83,7 +83,9 @@ class MessageReader(object):
         self._header = self._message[:match.start()]
         bodycount = len(self._message[match.end():])
         matchContent = re.search(b"^content-length:\s+(\d+)", self._header, re.IGNORECASE | re.MULTILINE)
-        #value is not important: chunked coding should be always included and applied the last
+        #When using Transfer-Encoding, chunked coding is
+        # and applied the last according to 3.6 Protocol Paramters: Transfer Codings
+        # otherwise, message end is by closing the connection
         matchTransfer = re.search(b"^transfer-encoding:\s+", self._header, re.IGNORECASE | re.MULTILINE)
         #if present, content-length is ignored
         if matchTransfer: 
@@ -102,6 +104,7 @@ class MessageReader(object):
         try:
             if chunked:
                 while 1:                        
+                    # Search for 0-chunk and possibly a trailer following a newline
                     matchTransferEnd = re.search(b"0\r\n(.*\r\n)?\r\n", self._message[len(self._header):])
                     if matchTransferEnd:
                         self._ok = True

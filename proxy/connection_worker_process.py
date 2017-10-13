@@ -152,6 +152,7 @@ class ConnectionWorkerProcess:
         
         #supporting persistent connection with the client but the server connection is single-use
         #so change keep-alive to close
+        # Don't pass client "Connection" to origin server, according to HTTP Spec 14.10 (Header Field Definitions: Connection)
 
         request_message = RequestReader.set_keep_alive(request.message(), len(request.header()), keep_alive=False)
 
