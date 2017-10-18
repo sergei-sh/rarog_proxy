@@ -20,7 +20,7 @@ import time
 
 from proxy import storage
 from proxy.logger import log, log_basic_config, logger, init_lock
-from proxy.network import NetworkRoutines as net
+import proxy.network as net
 from proxy.connection_worker_process import ConnectionWorkerProcess, ProcData
 from proxy.const import Const
 

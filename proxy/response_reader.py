@@ -15,31 +15,29 @@ class ResponseReader(MessageReader):
     """Extracts response's fields of interest
     """
 
-    def response_status(self):
-        return self._response_status 
-
-    def response_data(self):
-        return self._response_data
-
     def __init__(self, stream):
-        MessageReader.__init__(self, stream)
-        self._response_status = 0 
-        self._response_data = b""
+        """Get incoming bytes, read as long as needed and split into desired fields
 
-        if not self._ok:
+        stream - open socket to read from
+        """
+        MessageReader.__init__(self, stream)
+        self.response_status = 0 
+        self.response_data = b""
+
+        if not self.ok:
             return
 
-        match = re.search(b"(\r\n|\n)", self.message())
+        match = re.search(b"(\r\n|\n)", self.message)
         if not match:
             proc_error("Bad response (1)")
-            proc_error(self.message())
+            proc_error(self.message)
             return
-        self._response_data = self.message()[match.end():]
-        status = self.message()[:match.start()]
+        self.response_data = self.message[match.end():]
+        status = self.message[:match.start()]
         try:
             statusParts = status.split(b" ", 2)
-            self._response_status = int(statusParts[1])
-        except:
+            self.response_status = int(statusParts[1])
+        except IndexError:
             proc_error("Bad response (2)")
             
 

@@ -16,12 +16,7 @@ from proxy.logger import proc_error, log
 from proxy.config import Config
 from proxy.const import Const
 
-class DBStorage:
-    TIME_FORMAT = "%H:%M:%S %b %d %Y"
-    DB_NAME = "proxy_cache"
-
-    @staticmethod
-    def _connect(db_name):
+def _connect(db_name):
         return connect("host=%s port=%s dbname=%s user=%s password=%s" % 
             (Config.value(Const.STORAGE_SECTION, "host"),
              Config.value(Const.STORAGE_SECTION, "port"),
@@ -29,8 +24,12 @@ class DBStorage:
              Config.value(Const.STORAGE_SECTION, "user"),
              Config.value(Const.STORAGE_SECTION, "password")))
 
+class DBStorage:
+    TIME_FORMAT = "%H:%M:%S %b %d %Y"
+    DB_NAME = "proxy_cache"
+
     def __init__(self):
-        self._conn = DBStorage._connect(DBStorage.DB_NAME)
+        self._conn = _connect(DBStorage.DB_NAME)
 
     def __del__(self):
         if hasattr(self, '_conn'):
@@ -40,7 +39,7 @@ class DBStorage:
     def check_init_db():
         """Checks if can connect to proxy_cache and creates the DB and the files table"""
         try:
-            conn = DBStorage._connect(DBStorage.DB_NAME)
+            conn = _connect(DBStorage.DB_NAME)
         except OperationalError as errv:
             log("Cannot connect to the database. Trying to create the database\n ", WARNING) 
             DBStorage._init_db()

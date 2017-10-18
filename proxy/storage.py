@@ -6,13 +6,16 @@ Notes: Storage indirection level
 """
 
 
+from proxy import ProxyException
 from proxy.config import Config
 from proxy.const import Const 
 
-"""
-returns - Storage object of certain type depending on config setting
-"""
 def get_storage():
+    """
+    
+    return - Storage object of certain type depending on config setting
+    """
+
     storage_type = Config.value(Const.STORAGE_SECTION, "storage")
     if "DB" == storage_type:
         from proxy.db_storage import DBStorage
@@ -22,4 +25,4 @@ def get_storage():
         from proxy.fs_storage import FSStorage
         return FSStorage()
     else:
-        sys.exit('Need either DB or FS storage type in proxy.ini')
+        raise ProxyException('Need either DB or FS storage type in proxy.ini')
