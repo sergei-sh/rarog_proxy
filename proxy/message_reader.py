@@ -11,7 +11,7 @@ library call.
 
 import re
 
-from proxy.logger import logger, logerror, logstate
+from proxy.logger import logger, proc_error, proc_debug
 
 class MessageReader(object):
     """The base class for reading an HTTP message from a socket. Handles both Content-Length and 
@@ -46,17 +46,19 @@ class MessageReader(object):
         abort = False
         chunked = False
         while 1:
-            logstate("readhdr")
+            proc_debug("Readhdr")
             try:
                 chunk = stream.recv(BUF_SIZE_SMALL)
             except OSError as errv:
-                self._ok = False
+                if 11 == errv.errno and self._message:
+                    self._ok = True
+                    proc_error("Timeout while reading - OK (0) %s " % str(errv))
+                    self._message += b"\r\n\r\n"
+                    return
                 self._timeout = not self._message
-                logerror("Message read failed (1) %s " % str(errv))
-                logstate(str(errv))
+                proc_error("Message read failed (1) %s " % str(errv))
+                proc_debug(str(errv))
                 return
-            except Exception:
-                raise
             # empty chunk means client shutted down
             if None == chunk or 0 == len(chunk) :
                 abort = True
@@ -70,9 +72,9 @@ class MessageReader(object):
             # empty line at the end means end of the _headers section. We only handle GET, without a body, so stop here
             match = re.search(b"(\r\n\r\n|\n\n)", self._message);
             if match:
-                logstate("match")
+                proc_debug("Match")
                 break
-            logstate("notmatch")
+            proc_debug("Notmatch")
 
         if abort or b"HTTP" not in self._message:
             self._ok = False
@@ -109,7 +111,7 @@ class MessageReader(object):
                     if matchTransferEnd:
                         self._ok = True
                         break
-                    logstate("readbody ch")
+                    proc_debug("Readbody ch")
                     chunk = stream.recv(BUF_SIZE)
                     if not chunk:
                         self._ok = False
@@ -122,7 +124,7 @@ class MessageReader(object):
                     if bodycount == contentLength:
                         self._ok = True
                         break
-                    logstate("readbody cl")
+                    proc_debug("readbody cl")
                     if contentLength - bodycount >= BUF_SIZE:
                         chunk = stream.recv(BUF_SIZE)
                     else:
@@ -132,8 +134,8 @@ class MessageReader(object):
                         break
                     self._message += chunk
         except OSError as value:
-                logerror("Message read failed (2) ")
-                logerror(str(value))
+                proc_error("Message read failed (2) ")
+                proc_error(str(value))
                 self._ok = False
                 self._timeout = not self._message
                       
@@ -142,6 +144,11 @@ class MessageReader(object):
         search_in = message[:size]
         matchConn = re.search(b"^connection:\s+.*$", search_in, re.IGNORECASE | re.MULTILINE)
         if matchConn:
+            """
+
+            ENSURE \\r!!!
+
+            """
             return message[:matchConn.start()] + b"connection: " + (b"keep-alive" if keep_alive else b"close") + message[matchConn.end():]
         else:
             return message

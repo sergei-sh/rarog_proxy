@@ -16,6 +16,7 @@ def get_storage():
     storage_type = Config.value(Const.STORAGE_SECTION, "storage")
     if "DB" == storage_type:
         from proxy.db_storage import DBStorage
+        DBStorage.check_init_db()
         return DBStorage()
     elif "FS" == storage_type:
         from proxy.fs_storage import FSStorage

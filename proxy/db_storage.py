@@ -12,7 +12,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import time
 
 from proxy import encoding
-from proxy.logger import logerror, log
+from proxy.logger import proc_error, log
 from proxy.config import Config
 from proxy.const import Const
 
@@ -63,7 +63,7 @@ class DBStorage:
         try:
             cur.execute("CREATE TABLE files (url TEXT PRIMARY KEY, timestamp TEXT, content BYTEA) ; ")
         except DatabaseError as errv:
-            logerror("DB create table failed: %s" % str(errv))
+            proc_error("DB create table failed: %s" % str(errv))
 
         conn.commit()
         cur.close()
@@ -81,7 +81,7 @@ class DBStorage:
         except IntegrityError as errv: #key already exists
             pass 
         except DatabaseError as errv:
-            logerror("DB write failed: %s" % str(errv))
+            proc_error("DB write failed: %s" % str(errv))
             return False
         finally:
             self._conn.commit()
@@ -101,7 +101,7 @@ class DBStorage:
                 return None
             return vals[0]
         except DatabaseError as errv:
-            logerror("DB read failed: %s" % str(errv))
+            proc_error("DB read failed: %s" % str(errv))
         finally:
             cur.close()
         return None
@@ -121,7 +121,7 @@ class DBStorage:
             cur.execute("DELETE FROM files WHERE url = %s ;", (str_path,))
             self._conn.commit()
         except DatabaseError as errv:
-            logerror("DB delete failed: %s" % str(errv))
+            proc_error("DB delete failed: %s" % str(errv))
         finally:
             cur.close()
         

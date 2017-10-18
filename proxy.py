@@ -2,25 +2,23 @@
 Updated: 2016
 Author: Sergei Shliakhtin
 Contact: xxx.serj@gmail.com
+Parser: Python 3
 Notes: 
 
 The main application class and program entry point.
 
 The application really works (can display various HTML pages, rather quick), but the funcionality is very limited.
-Please don't use it in any production :)
 """
 
 import logging
 import multiprocessing
-import os
 import select
-import signal
 from socket import SHUT_WR
 from statistics import mode
 import sys
 import time
 
-from proxy.db_storage import DBStorage
+from proxy import storage
 from proxy.logger import log, log_basic_config, logger, init_lock
 from proxy.network import NetworkRoutines as net
 from proxy.connection_worker_process import ConnectionWorkerProcess, ProcData
@@ -84,7 +82,8 @@ class ProxyServer:
         input_sockets = [self._server_socket]
         active_proc_num = 0
 
-        DBStorage.check_init_db()
+        # init database, if DB storage is chosen
+        storage.get_storage()
 
         #create child processes
         for _ in range(max_proc):
@@ -189,17 +188,21 @@ class ProxyServer:
                   self._complete_req,
                   self._total_req,
                   self._failed_read_req))
-           try:
-               _clog("A.proc count mode: %f" % mode(self._proc_vals))
-           except Exception:
-               pass
+           _clog("A.proc count mode: %f" % mode(self._proc_vals))
 
-        for proc_data in self._processes:
-            """Allow them to exit gracefully"""
-            os.kill(proc_data.process.pid, signal.SIGINT)
+        self._stop_all()
 
-        if KeyboardInterrupt == exc_type:
+        if exc_type == KeyboardInterrupt:
+            _clog("KeyboardInterrupt")
             return True
+
+    def _stop_all(self):            
+        pids = [proc_data.process.pid for proc_data in self._processes]
+        _clog("Stopping processes {}".format(pids))
+        for proc_data in self._processes:
+            """They don't have children - OK to terminate"""
+            proc_data.process.terminate()
+
 
 
 if __name__ == "__main__":

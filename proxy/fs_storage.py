@@ -11,7 +11,7 @@ import os
 
 from proxy.config import Config
 from proxy.encoding import to_str, to_bytes
-from proxy.logger import logerror
+from proxy.logger import proc_error
 from proxy.const import Const
 
 import multiprocessing
@@ -62,7 +62,7 @@ class FSStorage:
         except FileExistsError:
             return False
         except OSError as errv:
-            logerror("Couldn't save to %s : %s" % (key_path, str(errv)))
+            proc_error("Couldn't save to %s : %s" % (key_path, str(errv)))
             return False
 
     def fetch(self, key_path):

@@ -43,20 +43,20 @@ def log(message, level=logging.INFO, label=None):
     else:
         logger(label).log(level, message)
 
-def logerror(message):
+def proc_error(message):
     log(message)
     log_per_process(message, "err_")
 
-def logstate(message):
+def proc_state(message):
     log_per_process(message, "state_")
 
-def logrequest(message):
-    log_per_process(message, "req_")
+def proc_debug(message):
+    proc_state(message)    
 
 def log_per_process(message, prefix):
     logger_name = prefix + multiprocessing.current_process().name
-    if not prefix in logstate.has_handler:
-        logstate.has_handler.append(prefix)
+    if not prefix in proc_state.has_handler:
+        proc_state.has_handler.append(prefix)
         log_dir = Config.value(Const.MAIN_SECTION, "log_path")
         if not os.path.exists(log_dir):
             os.makedirs(log_dir, mode=0o777, exist_ok=True)
@@ -65,6 +65,6 @@ def log_per_process(message, prefix):
         logger(logger_name).addHandler(fhandler)
     logger(logger_name).warning(message)
 
-logstate.has_handler = [] 
+proc_state.has_handler = [] 
 
 

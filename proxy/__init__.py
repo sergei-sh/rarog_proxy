@@ -5,4 +5,7 @@ Contact: xxx.serj@gmail.com
 Notes:
 """
 
+class ProxyException(Exception):
+    pass
+
 

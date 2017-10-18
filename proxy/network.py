@@ -13,13 +13,14 @@ import os
 import socket
 import struct
 
-from proxy.logger import logerror, logstate
+from proxy.logger import proc_error, proc_state
+from proxy.encoding import to_str
 
 class NetworkRoutines:
     """ All the application network interaction
     """
     DEFAULT_PORT = 80
-    TIMEOUT = 10 
+    TIMEOUT = 5 
     TCP_ESTABLISHED = 1
     IPC_BUF = 64 
 
@@ -33,8 +34,8 @@ class NetworkRoutines:
             ipc_socket.sendmsg([b"X"], #just some message to send
                 ancdata)
         except OSError as err:
-            logerror("fd sending failed: %s" % str(err))
-            logstate("fdsenderror")
+            proc_error("Fd sending failed: %s" % str(err))
+            proc_state("Rdsenderror")
 
 
     @staticmethod
@@ -43,8 +44,8 @@ class NetworkRoutines:
         try:
             msg, anc, flags, addr = ipc_socket.recvmsg(NetworkRoutines.IPC_BUF, NetworkRoutines.IPC_BUF)
         except OSError as err:
-            logerror("fd receiving failed: %s" % str(err))
-            logstate("fdreqerror")
+            proc_error("Fd receiving failed: %s" % str(err))
+            proc_state("Fdreqerror")
             return None
         fds = []
         for level, type, data in anc:
@@ -69,7 +70,7 @@ class NetworkRoutines:
         try:
             listener_socket.bind((addr, port))
         except OSError:
-            logerror("Failed socket binding to %s:%i" % (addr, port))
+            proc_error("Failed socket binding to %s:%i" % (addr, port))
             return None
         return listener_socket
 
@@ -77,11 +78,20 @@ class NetworkRoutines:
     def connected_socket(host):
         sender_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sender_socket.settimeout(NetworkRoutines.TIMEOUT)
+        host = to_str(host)
         try:
-            sender_socket.connect((host, NetworkRoutines.DEFAULT_PORT))
+            try:
+                host, port = host.split(":")
+                port = int(port)
+                print("host port=", host, port)
+            except ValueError:
+                port = NetworkRoutines.DEFAULT_PORT
+                print("host=", host)
+            sender_socket.connect((host, port))
         except OSError:
-            logerror("Failed to connect socket to %s:%i" % (host, NetworkRoutines.DEFAULT_PORT))
-        return sender_socket
+            proc_error("Failed to connect socket to %s:%i" % (host, NetworkRoutines.DEFAULT_PORT))
+        else:
+            return sender_socket
 
     @staticmethod
     def sock_status(sock):
@@ -91,7 +101,7 @@ class NetworkRoutines:
             values = struct.unpack(format, sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_INFO, 92))
             return values[0]
         except OSError as errv:
-            logerror("Failed getting socket status: %s" % str(errv))
+            proc_error("Failed getting socket status: %s" % str(errv))
             return None
 
     @staticmethod
@@ -99,12 +109,14 @@ class NetworkRoutines:
         return NetworkRoutines.TCP_ESTABLISHED == NetworkRoutines.sock_status(fd)
 
     @staticmethod
-    def send_all(socket, data):
+    def send_all(socket, data, debug=False):
         try:
             socket.sendall(data)
+            if debug:
+                print(data)
             return True
         except OSError as errv:
-            logerror("Sending failed: %s" % str(errv))
+            proc_error("Sending failed: %s" % str(errv))
             return False
     
 
