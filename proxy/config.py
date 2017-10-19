@@ -9,8 +9,8 @@ Notes: TO BE REWRITTEN (no need for singleton)
 import configparser
 import sys
 
-#singleton config object
 class Config:
+    """Wrap ConfigParser to ease access to "proxy.ini" """
     class ConfigLoader(configparser.ConfigParser):
         def __init__(self):
             super(self.__class__, self).__init__()

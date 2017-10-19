@@ -7,13 +7,16 @@ Notes:
 
 The main application class and program entry point.
 
-The application really works (can display various HTML pages, rather quick), but the funcionality is very limited.
+The proxy server can display various HTML pages, rather quick, but the funcionality is very limited.
+Tested on Opera, Mozilla.
+Testing procedure: set up Proxy in browser's Network Settngs. Open any HTTP website. Monitor active processes
+and open sockets in the console.
+HTTPS requests should be sent through CONNECT method.
 """
 
 import logging
 import multiprocessing
 import select
-from socket import SHUT_WR
 from statistics import mode
 import sys
 import time
@@ -25,6 +28,10 @@ from proxy.connection_worker_process import ConnectionWorkerProcess, ProcData
 from proxy.const import Const
 
 def _clog(message):
+    """Module-specific logging
+
+    message - str
+    """
     log(message, logging.WARNING)
  
 class ProxyServer:
@@ -32,15 +39,18 @@ class ProxyServer:
        are created once in a fixed number and then accepted sockets are passed to them
        through UNIX socket"""
     def __init__(self, server_ip, port, max_processes):
+        """
+        server_ip - str, accept connections on this address
+        port - int, accept on this port
+        max_processes - number of processes to spawn. Those are spawned once and terminated
+            on the application exit
+        """ 
         multiprocessing.set_start_method("spawn")
         log_basic_config()
         self._stdout_lock = multiprocessing.Lock()
         init_lock(self._stdout_lock)
 
         self._server_socket = net.bound_socket(server_ip, port)
-        if not self._server_socket:
-            sys.exit(0)
-        self._server_socket.setblocking(0)
         TCP_BACKLOG = 32
         self._server_socket.listen(TCP_BACKLOG)
 
@@ -59,7 +69,11 @@ class ProxyServer:
 
     def _process_if_done(self, proc_data, input_sockets):
        """After a worker process id done with some FD the latter is either being closed or returned
-          back to select() for later read"""
+       back to select() for later read
+      
+       proc_data - ProcessData
+       input_sockets - socket list
+       """
        if proc_data.client_sock:
             if ProcData.DONE_OPEN == proc_data.status.value:
                 self._count_req(proc_data)
@@ -70,8 +84,7 @@ class ProxyServer:
             if ProcData.DONE_CLOSE == proc_data.status.value:
                 self._count_req(proc_data)
 #done with the socket in both parent and child processes
-                try:  proc_data.client_sock.shutdown(socket.SHUT_WR)
-                except Exception: pass
+                net.shutdown(proc_data.client_sock)
                 self._all_open.remove(proc_data.client_sock)
                 log("Cl-%i-%s " % (proc_data.client_sock.fileno(), proc_data.process_name))
                 proc_data.client_sock.close()
@@ -79,6 +92,8 @@ class ProxyServer:
                 proc_data.client_sock = None
 
     def main_loop(self):
+        """Loops infinitely to handle application events until KeyboardInterrupted"""
+
         input_sockets = [self._server_socket]
         active_proc_num = 0
 
@@ -166,7 +181,10 @@ class ProxyServer:
                 + str([s.fileno() for s in ready] ))
 
     def _count_req(self, proc_data):
-        """Pick up the statistics from process going inactive"""
+        """Pick up the statistics from process going inactive
+        
+        proc_data - ProcessData
+        """
         self._total_req += proc_data.session_req.value
         self._complete_req += proc_data.complete_req.value
         self._failed_read_req += proc_data.failed_read_req.value
@@ -178,7 +196,12 @@ class ProxyServer:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Print stats and shutdown children"""
+        """Print stats and shutdown children
+        
+        exc_type - exception class 
+        exc_value -
+        tracebak - 
+        """
         if self._start_time is not None:
            elapsed = time.time() - self._start_time 
            _clog("\n\nElapsed: %f Average a.proc count: %f Success: %f Complete: %i Total: %i FailedRead: %i "
@@ -197,6 +220,7 @@ class ProxyServer:
             return True
 
     def _stop_all(self):            
+        """Stop all child processes"""
         pids = [proc_data.process.pid for proc_data in self._processes]
         _clog("Stopping processes {}".format(pids))
         for proc_data in self._processes:

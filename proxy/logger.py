@@ -15,6 +15,7 @@ from proxy.const import Const
 from proxy.config import Config
 
 def log_basic_config():
+    """Init loggefs from file config. Should be called once only"""
     #logging.basicConfig(format="%(message)s", level=logging.INFO)
     logging.config.fileConfig("loggers.conf")
     console = logger(Const.CONSOLE_LOGGER)

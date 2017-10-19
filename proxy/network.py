@@ -9,6 +9,7 @@ All the application network interaction
 
 import array
 import multiprocessing
+import errno
 import os
 import socket
 import struct
@@ -19,8 +20,6 @@ from proxy.encoding import to_str
 
 # Port to connect to if none is given in the URL
 DEFAULT_PORT = 80
-# Seconds to wait before assuming peer timeout
-TIMEOUT = 20 
 # To compare "sock_status" output
 TCP_ESTABLISHED = 1
 # Buffer size of IPC socket
@@ -65,16 +64,19 @@ def ipc_socket_pair():
 def bound_socket(addr, port):
     listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # non-blocking mode
+    listener_socket.settimeout(0)
     try:
         listener_socket.bind((addr, port))
     except OSError:
-        proc_error("Failed socket binding to %s:%i" % (addr, port))
-        return None
+        msg = "Failed socket binding to %s:%i" % (addr, port)
+        proc_error(msg)
+        raise ProxyException(msg)
     return listener_socket
 
-def connected_socket(host):
+def connected_socket(host, *, timeout=0):
     sender_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sender_socket.settimeout(TIMEOUT)
+    sender_socket.settimeout(timeout)
     host = to_str(host)
     try:
         try:
@@ -114,9 +116,9 @@ def send_all(socket, data, debug=False):
 def shutdown(socket_):
     try:
         socket_.shutdown(socket.SHUT_WR)
-    except socket.error as e:
+    except OSError as e:
         # Already closed - OK
-        if get_errno(e) != errno.ENOTCONN:
+        if e.errno != errno.ENOTCONN:
             raise
     socket_.close()
 
@@ -130,6 +132,9 @@ def tunnel(self, sock_orig, sock_client):
     sock_client - socket
     """
     BUF_SIZE = 4096
+    """This sockets should be in timeout mode for this implementation. They are  
+    supposed to be closed after  tunnel finishes
+    """
     TIMEOUT = 5 
 
     def log_code(code, comment, level=logging.DEBUG):

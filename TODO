@@ -1,5 +1,6 @@
 
-comments
+comments for network, logger
+None -> exceptions in network
 
 CONNECT refactor with select
 ConnWorker - refactor cache

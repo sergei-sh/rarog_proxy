@@ -7,17 +7,12 @@ Notes: Main data flow redirection/request handling happens here
 
 import logging 
 import multiprocessing
-import os
-import queue
-import re
 import socket
-import sys
 import time
 
 from proxy import ProxyException
 from proxy.config import Config
 from proxy.const import Const
-from proxy.encoding import to_str, to_bytes
 import proxy.http_response as Response
 from proxy.http_response import add_ok_status
 from proxy.logger import log, log_basic_config, logger, proc_state
@@ -28,9 +23,11 @@ from proxy.response_reader import ResponseReader
 import proxy.storage
 
 class ProcData:
-    """Data related to a single process. Those not process-safe are for parent process
-       use only"""
+    """Data related to a single process. Those not process-safe variables are for parent process
+    use only
+    """
     READY, ACTIVE, DONE_OPEN, DONE_CLOSE = list(range(4))
+
     def __init__(self):
         self.process_name = None 
         #shared data
@@ -47,14 +44,16 @@ class ProcData:
 
 class ConnectionWorkerProcess:
     """Handles one process. Get an IPC socket initially which is then used to retrieve 
-       a client socket
+    a client socket
     """
-    #will be called in parent process
     def __init__(self):
+        """Should be called from parent process"""
         self.is_init = False
 
-    #should be called in child process
     def _init_this_process(self):
+        """Initialize process variables and determined storage type configured.
+        Should be called in child process
+        """
         assert not self.is_init
         self.is_init = True
         log_basic_config()
@@ -68,6 +67,14 @@ class ConnectionWorkerProcess:
             self._storage = proxy.storage.get_storage()
  
     def __call__(self, process_data, ipc_socket, stdout_lock):
+        """Run this process wait loop and perform actual message transmission. Terminate
+        on SIGINT. The process will run until application end and handle different client
+        sockets when passed from the main process.
+
+        process_data - ProcessData associated with this process
+        ipc_socket - unix socket to suck FDs from
+        stdout_lock - limit access to STDOUT
+        """
         self._init_this_process()
         self._stdout_lock = stdout_lock
         self._proc_data = process_data
@@ -79,6 +86,12 @@ class ConnectionWorkerProcess:
             return
 
     def _do_work(self, ipc_socket):
+        """Wait on ipc socket for incoming client sockets. Handle incoming messages,
+        opening origin server connections when needed. Close client socket or let it be 
+        "selected" further depending on what has happened.
+
+        ipc_socket - unix socket to suck FDs from
+        """
 
         proc_name = multiprocessing.current_process().name
 
@@ -88,7 +101,6 @@ class ConnectionWorkerProcess:
            #will block here if no incoming sockets
            self._client_sock = socket.fromfd(net.fd_from_socket(ipc_socket), socket.AF_INET, socket.SOCK_STREAM)
            proc_state("Got fd")
-           self._client_sock.settimeout(0)
 
            # recursion depth, shows the number of requests pipelined so far through this socket
            self._pipeline_depth = 0
@@ -97,8 +109,10 @@ class ConnectionWorkerProcess:
            self._client_sock.close()
 
            if client_ok and established:
+               # return client socket back to select and wait more requests
                self._proc_data.status.value = ProcData.DONE_OPEN 
            else:
+               # close client socket
                self._proc_data.status.value = ProcData.DONE_CLOSE
 
     def _try_handle_more(self, pipeline_tail): 
@@ -129,14 +143,14 @@ class ConnectionWorkerProcess:
         log(message_f)
 
     def _handle_next_request(self, pipeline_tail=b""):
-        """Get a request from client, pass to orig server then in case of success
-           pass response back to client and cache the response
-           
-           pipeline_tail - next message head chunk; when reading the current message,
-                the next message data can be also read partially when pipelining
-           pipeline_depth - recursion depth for this pipeline
-           
-           return - bool, False - done working with this FD, True - wait more data on select"""
+        """Support GET and CONNECT methods. Call the same method recursively to read more data
+        on the same client socket, until it stops sending or error occurs.
+       
+        pipeline_tail - next message head chunk; when reading the current message,
+            the next message data can be also read partially when pipelining
+        pipeline_depth - recursion depth for this pipeline
+        return - bool, False - done working with this FD, True - wait more data on select
+        """
 
         if not self._client_sock:
             _log_code("NCS", "No client socket")
@@ -174,96 +188,105 @@ class ConnectionWorkerProcess:
             return self._do_GET(request, pipeline_tail)
 
     def _do_GET(self, request, pipeline_tail):            
-            #supporting persistent connection with the client but the server connection is single-use
-            #so change keep-alive to close
-            # Don't pass client "Connection" to origin server, according to HTTP Spec 14.10 (Header Field Definitions: Connection)
-            _log_code = self._log_code
+        """Get a request from client, pass to orig server then in case of success
+        pass response back to client and cache the response, if needed. Inform client
+        on errors.
 
-            request_message = set_keep_alive(request.message, len(request.header), keep_alive=False)
+        request - RequestReader
+        pipeline_tail - data already read, to be joined with newly read data
+        """
+        _log_code = self._log_code
+        #supporting persistent connection with the client but the server connection is single-use
+        #so change keep-alive to close
+        # Don't pass client "Connection" to origin server, according to HTTP Spec 14.10 (Header Field Definitions: Connection)
+        request_message = set_keep_alive(request.message, len(request.header), keep_alive=False)
 
-            cache_location = request.cache_location
-            if self._use_cache and self._storage:
-                haskey, time_loaded = self._storage.haskey_time(cache_location)
-                if haskey:
-                    loaded_ago = time.time() - time_loaded
-                    if loaded_ago > float(Config.value(Const.STORAGE_SECTION, "cache_discard_after")):
-                        self._storage.erase(cache_location)
-                    else:
-                        outputData = self._storage.fetch(cache_location)
-                        if not outputData:
-                            #data is being written by another process or read error
-                            net.send_all(self._client_sock, Response.RESPONSE_500)
-                            return False
-
-                        if net.send_all(self._client_sock, add_ok_status(outputData)):
-                            _log_code("C", "Sent from cache")
-                            with self._proc_data.complete_req.get_lock():
-                                self._proc_data.complete_req.value += 1
-                            #successful reply from cache -> continue with the same socket
-                            return self._try_handle_more(request.tail)
-                        else:
-                            #failed to send cache reply
-                            _log_code("CX", "Fail to send from cache")
-                            return False
-
-            #file not found in cache  -sending request to the destination server
-            host = request.hostname
-            origin_srv = net.connected_socket(host)
-            proc_state("Recsrv")
-            if not origin_srv or not net.send_all(origin_srv, request_message):
-                if origin_srv:
-                    origin_srv.close()
-                #origin server request sending failed
-                _log_code("RX", "Origin server communication failed")
-                net.send_all(self._client_sock, Response.RESPONSE_502)
-                return self._try_handle_more(request.tail)
-            response = ResponseReader(origin_srv)
-
-            proc_state("Readsrv")
-            #we expect client to keep sending pipelined requests
-            response_message = set_keep_alive(response.message, len(response.header), keep_alive=True)
-            response_message_cache = set_keep_alive(response.response_data, len(response.header), keep_alive=True)
-
-            net.shutdown(origin_srv)
-
-            if not response.ok:
-               if response.timeout:
-                   #empty response connection is shutdown
-                   _log_code("RX", "Origin response time out")
-               else:
-                   #server stopped transferring in the middle
-                   _log_code("RXX", "Origin truncated response")
-               if not net.send_all(self._client_sock, Response.RESPONSE_504):
-                   #failed to deliver error response to client
-                   _log_code("RRX", "Client err response send failed")
-               return False
-
-            proc_state("Sendclient")                
-            if not net.send_all(self._client_sock, response_message):
-                #failed sending to client
-                _log_code("TX", "Client ok response send failed")
-                return False
-            #successful response delivery
-            # self._client_sock.close()
-            _log_code("T", "Client response send success")
-            with self._proc_data.complete_req.get_lock():
-                self._proc_data.complete_req.value  += 1
-
-            if self._use_cache and self._storage:
-                if Const.HTTP_OK == response.response_status:
-                        haskey, ts = self._storage.haskey_time(cache_location)
-                        if not haskey:
-                           if not self._storage.save(cache_location, response_message_cache): 
-                               #cache write fail                           
-                               _log_code("CSX", "Cache write fail")
+        cache_location = request.cache_location
+        if self._use_cache and self._storage:
+            haskey, time_loaded = self._storage.haskey_time(cache_location)
+            if haskey:
+                loaded_ago = time.time() - time_loaded
+                if loaded_ago > float(Config.value(Const.STORAGE_SECTION, "cache_discard_after")):
+                    self._storage.erase(cache_location)
                 else:
-                    #not saving non-success response                
-                    _log_code("S+" + str(response.response_status), "Non-ok from origin")
-            
-            #partially read next message -> continue reading this socket
+                    outputData = self._storage.fetch(cache_location)
+                    if not outputData:
+                        #data is being written by another process or read error
+                        net.send_all(self._client_sock, Response.RESPONSE_500)
+                        return False
+
+                    if net.send_all(self._client_sock, add_ok_status(outputData)):
+                        _log_code("C", "Sent from cache")
+                        with self._proc_data.complete_req.get_lock():
+                            self._proc_data.complete_req.value += 1
+                        #successful reply from cache -> continue with the same socket
+                        return self._try_handle_more(request.tail)
+                    else:
+                        #failed to send cache reply
+                        _log_code("CX", "Fail to send from cache")
+                        return False
+
+        #file not found in cache  -sending request to the destination server
+        host = request.hostname
+        origin_srv = net.connected_socket(host, timeout=20)
+        proc_state("Recsrv")
+        if not origin_srv or not net.send_all(origin_srv, request_message):
+            if origin_srv:
+                origin_srv.close()
+            #origin server request sending failed
+            _log_code("RX", "Origin server communication failed")
+            net.send_all(self._client_sock, Response.RESPONSE_502)
             return self._try_handle_more(request.tail)
+        response = ResponseReader(origin_srv)
+
+        proc_state("Readsrv")
+        #we expect client to keep sending pipelined requests
+        response_message = set_keep_alive(response.message, len(response.header), keep_alive=True)
+        response_message_cache = set_keep_alive(response.response_data, len(response.header), keep_alive=True)
+
+        net.shutdown(origin_srv)
+
+        if not response.ok:
+           if response.timeout:
+               #empty response connection is shutdown
+               _log_code("RX", "Origin response time out")
+           else:
+               #server stopped transferring in the middle
+               _log_code("RXX", "Origin truncated response")
+           if not net.send_all(self._client_sock, Response.RESPONSE_504):
+               #failed to deliver error response to client
+               _log_code("RRX", "Client err response send failed")
+           return False
+
+        proc_state("Sendclient")                
+        if not net.send_all(self._client_sock, response_message):
+            #failed sending to client
+            _log_code("TX", "Client ok response send failed")
+            return False
+        #successful response delivery
+        _log_code("T", "Client response send success")
+        with self._proc_data.complete_req.get_lock():
+            self._proc_data.complete_req.value  += 1
+
+        if self._use_cache and self._storage:
+            if Const.HTTP_OK == response.response_status:
+                    haskey, ts = self._storage.haskey_time(cache_location)
+                    if not haskey:
+                       if not self._storage.save(cache_location, response_message_cache): 
+                           #cache write fail                           
+                           _log_code("CSX", "Cache write fail")
+            else:
+                #not saving non-success response                
+                _log_code("S+" + str(response.response_status), "Non-ok from origin")
+        
+        #partially read next message -> continue reading this socket
+        return self._try_handle_more(request.tail)
 
     def _do_OTHER(self, request):            
+        """Handle unsupported method/protocol
+        
+        request - RequestReader
+        """
         self._log_code("XXX {}".format(request.method_str), "Unsupported method")
         net.send_all(self._client_sock, Response.RESPONSE_501)
         proc_name = multiprocessing.current_process().name
@@ -271,6 +294,7 @@ class ConnectionWorkerProcess:
             self._proc_data.failed_read_req.value += 1
            
     def _do_CONNECT(self):
+        """Open tunnel from one socket to another. Dispose sockets after done"""
         orig_sock = net.connected_socket(request.hostname)
         if orig_sock:
             net.send_all(self._client_sock, Response.RESPONSE_200)

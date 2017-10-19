@@ -1,5 +1,5 @@
 """ 
-Updated: 2016
+Updated: 2017
 Author: Sergei Shliakhtin
 Contact: xxx.serj@gmail.com
 Notes: Filesystem storage for cached data
@@ -39,6 +39,10 @@ class LockedFile():
         self._file.close()
 
 class FSStorage:
+    """Allows saving resources to disk by resource path. Resource path reflects actual
+    disk location relative to cache dir.
+    """
+
     def __init__(self):
         self.__cache_dir = to_bytes(Config.value(Const.STORAGE_SECTION, 'cache_path'))
         assert self.__cache_dir
